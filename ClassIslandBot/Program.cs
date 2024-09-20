@@ -1,5 +1,6 @@
 using ClassIslandBot;
 using ClassIslandBot.Services;
+using Microsoft.EntityFrameworkCore;
 using Octokit;
 using Octokit.GraphQL;
 using Octokit.GraphQL.Core;
@@ -23,6 +24,10 @@ builder.Services.AddScoped<WebhookEventProcessor, IssueWebhookProcessorService>(
 
 builder.Services.AddDbContext<BotContext>();
 
+#if DEBUG
+builder.Logging.SetMinimumLevel(LogLevel.Trace);
+#endif
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -38,7 +43,15 @@ if (github != null)
     Console.WriteLine(await github.GetInstallationTokenAsync());
 }
 
-app.UseHttpsRedirection();
+// app.UseHttpsRedirection();
 app.MapGitHubWebhooks();
+
+#if DEBUG  // 处于开发环境时需要自动迁移
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<BotContext>();
+    db.Database.Migrate();
+}
+#endif
 
 app.Run();

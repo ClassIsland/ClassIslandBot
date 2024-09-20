@@ -13,4 +13,9 @@ public class BotContext : DbContext
         options.UseSqlite($"Data Source=data.db");
         base.OnConfiguring(options);
     }
+    
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        
+    }
 }

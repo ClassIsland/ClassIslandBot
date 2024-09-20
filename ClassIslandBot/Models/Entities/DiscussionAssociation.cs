@@ -1,10 +1,17 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace ClassIslandBot.Models.Entities;
 
 public class DiscussionAssociation
 {
-    public long RepoId { get; set; } = 0;
+    [Key]
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+    public long Id { get; set; }
     
-    public long DiscussionId { get; set; } = 0;
+    public string RepoId { get; set; } = "";
+    
+    public string DiscussionId { get; set; } = "";
 
-    public long IssueId { get; set; } = 0;
+    public string IssueId { get; set; } = "";
 }

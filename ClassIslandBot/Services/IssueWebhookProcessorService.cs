@@ -21,15 +21,19 @@ public class IssueWebhookProcessorService(GitHubAuthService gitHubAuthService, D
         // 判断是否属于功能请求类 Issue
         if (!issuesEvent.Issue.Labels.Any(x => x.Name is FeatureTagName or ImprovementTagName))
             return;
-        
 
-        await DiscussionService.ConnectDiscussionAsync(issuesEvent.Repository?.Id ?? -1, issuesEvent.Issue.Id, issuesEvent.Issue);
+        switch (action)
+        {
+            case "labeled":
+                await DiscussionService.ConnectDiscussionAsync(issuesEvent.Repository?.NodeId ?? "", issuesEvent.Issue.NodeId, issuesEvent.Issue);
+                break;
+        }
 
-        return;
     }
 
     protected override async Task ProcessPingWebhookAsync(WebhookHeaders headers, PingEvent pingEvent)
     {
         Logger.LogInformation("Ping!");
     }
+    
 }
