@@ -14,4 +14,6 @@ public class DiscussionAssociation
     public string DiscussionId { get; set; } = "";
 
     public string IssueId { get; set; } = "";
+
+    public bool IsTracking { get; set; } = true;
 }
