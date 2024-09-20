@@ -1,9 +1,12 @@
+using ClassIslandBot;
 using ClassIslandBot.Services;
 using Octokit;
 using Octokit.GraphQL;
 using Octokit.GraphQL.Core;
 using Octokit.GraphQL.Core.Builders;
 using Octokit.GraphQL.Model;
+using Octokit.Webhooks;
+using Octokit.Webhooks.AspNetCore;
 using static Octokit.GraphQL.Variable;
 using ProductHeaderValue = Octokit.ProductHeaderValue;
 
@@ -14,7 +17,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-builder.Services.AddSingleton<GitHubService>();
+builder.Services.AddSingleton<GitHubAuthService>();
+builder.Services.AddScoped<DiscussionService>();
+builder.Services.AddScoped<WebhookEventProcessor, IssueWebhookProcessorService>();
+
+builder.Services.AddDbContext<BotContext>();
 
 var app = builder.Build();
 
@@ -25,16 +32,13 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-var github = app.Services.GetService<GitHubService>();
+var github = app.Services.GetService<GitHubAuthService>();
 if (github != null)
 {
     Console.WriteLine(await github.GetInstallationTokenAsync());
 }
 
 app.UseHttpsRedirection();
-app.MapPost("/api/v1/github/webhook", async context =>
-{
-    
-});
+app.MapGitHubWebhooks();
 
 app.Run();

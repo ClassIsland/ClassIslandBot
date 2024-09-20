@@ -1,15 +1,27 @@
+using GitHubJwt;
 using Octokit;
 
 namespace ClassIslandBot.Services;
 
-public class GitHubService(ILogger<GitHubService> logger)
+public class GitHubAuthService(ILogger<GitHubAuthService> logger)
 {
-    public ILogger<GitHubService> Logger { get; } = logger;
+    public const string GitHubAppName = "classisland-bot";
+    
+    public ILogger<GitHubAuthService> Logger { get; } = logger;
     
     public const int InstallationTokenExpireSeconds = 3600;
     public const int AppTokenExpireSeconds = 120;
     private const int AppId = 998668;
     private const string OrgName = "ClassIsland";
+
+    private GitHubJwtFactory GitHubJwtFactory { get; } = new GitHubJwt.GitHubJwtFactory(
+        new GitHubJwt.FilePrivateKeySource("./private-key.pem"),
+        new GitHubJwt.GitHubJwtFactoryOptions
+        {
+            AppIntegrationId = AppId, // The GitHub App Id
+            ExpirationSeconds = AppTokenExpireSeconds // 10 minutes is the maximum time allowed
+        }
+    );
 
 
     private DateTime LastRefreshInstallationToken { get; set; } = DateTime.MinValue;
@@ -31,20 +43,12 @@ public class GitHubService(ILogger<GitHubService> logger)
         if (DateTime.Now - LastRefreshAppToken > TimeSpan.FromSeconds(AppTokenExpireSeconds) || AppTokenValue == null)
         {
             Logger.LogInformation("Refresh app token because it is expired or null");
-            var generator = new GitHubJwt.GitHubJwtFactory(
-                new GitHubJwt.FilePrivateKeySource("./private-key.pem"),
-                new GitHubJwt.GitHubJwtFactoryOptions
-                {
-                    AppIntegrationId = AppId, // The GitHub App Id
-                    ExpirationSeconds = AppTokenExpireSeconds // 10 minutes is the maximum time allowed
-                }
-            );
 
-            AppTokenValue = generator.CreateEncodedJwtToken();
+            AppTokenValue = GitHubJwtFactory.CreateEncodedJwtToken();
             LastRefreshAppToken = DateTime.Now;
             Logger.LogInformation("Refresh app token successfully");
         }
-        var github = new GitHubClient(new ProductHeaderValue("classisland-bot"))
+        var github = new GitHubClient(new ProductHeaderValue(GitHubAuthService.GitHubAppName))
         {
             Credentials = new Credentials(AppTokenValue, AuthenticationType.Bearer)
         };
