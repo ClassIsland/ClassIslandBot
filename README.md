@@ -6,4 +6,4 @@
 
 ## 许可证
 
-本项目基于 [MIT License](./LICENSE) 获得许可。
+本项目基于 [GNU Affero General Public License v3.0](./LICENSE) 获得许可。
