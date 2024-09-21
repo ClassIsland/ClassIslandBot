@@ -1,10 +1,16 @@
 using System.Collections.Frozen;
 using ClassIslandBot.Models.Entities;
 using Microsoft.EntityFrameworkCore;
+using Octokit;
 using Octokit.GraphQL;
 using Octokit.GraphQL.Core;
 using Octokit.GraphQL.Model;
+using Connection = Octokit.GraphQL.Connection;
 using Issue = Octokit.Webhooks.Models.Issue;
+using ProductHeaderValue = Octokit.GraphQL.ProductHeaderValue;
+using Repository = Octokit.GraphQL.Model.Repository;
+using static Octokit.GraphQL.Variable;
+using Label = Octokit.Label;
 
 namespace ClassIslandBot.Services;
 
@@ -166,5 +172,60 @@ public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext d
         association.IsTracking = false;
         await DbContext.SaveChangesAsync();
         Logger.LogTrace("Process #{} done", issue.Number);
+    }
+
+    public async Task SyncUnConnectedIssuesAsync()
+    {
+        var connection = new Connection(new ProductHeaderValue(GitHubAuthService.GitHubAppName), 
+            await GitHubAuthService.GetInstallationTokenAsync());
+
+        foreach (var (repo, _) in RepoMapping)
+        {
+            var query = new Query()
+                .Node(new ID(repo))
+                .Cast<Repository>()
+                .Issues(first: 100, states: new Arg<IEnumerable<IssueState>>([IssueState.Open]),
+                    labels: new Arg<IEnumerable<string>>([IssueWebhookProcessorService.FeatureTagName, IssueWebhookProcessorService.ImprovementTagName]),
+                    after: Var("after"))
+                .Select(x => new
+                {
+                    x.PageInfo.EndCursor,
+                    x.PageInfo.HasNextPage,
+                    x.TotalCount,
+                    Items = x.Nodes.Select(y => new
+                    {
+                        Issue = new Issue(){
+                            NodeId = y.Id.ToString(),
+                            Title = y.Title,
+                            Body = y.Body,
+                            HtmlUrl = y.Url,
+                            Number = y.Number,
+                        },
+                        Labels = y.Labels(100, null, null, null, null).Nodes.Select(label => new
+                        {
+                            label.Name
+                        }).ToList()
+                    }).ToList(),
+                })
+                .Compile();
+            var vars = new Dictionary<string, object?>
+            {
+                { "after", null },
+            };
+            do
+            {
+                var result = await connection.Run(query);
+                vars["after"] = result.HasNextPage ? result.EndCursor : null;
+                foreach (var i in result.Items.Where(x => !x.Labels.Any(y =>
+                             y.Name is IssueWebhookProcessorService.VotingTagName
+                                 or IssueWebhookProcessorService.ReviewingTagName
+                                 or IssueWebhookProcessorService.WipTagName)))
+                {
+                    Logger.LogInformation("Processing untracked issue #{} in {}: {}", i.Issue.Number, repo, i.Issue.Title);
+                    await ConnectDiscussionAsync(repo, i.Issue.NodeId.ToString(), i.Issue);
+                }
+
+            } while (vars["after"] != null);
+        }
     }
 }

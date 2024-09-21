@@ -12,6 +12,7 @@ public class IssueWebhookProcessorService(GitHubAuthService gitHubAuthService, D
     public const string ImprovementTagName = "功能优化";
     public const string WipTagName = "处理中";
     public const string VotingTagName = "投票中";
+    public const string ReviewingTagName = "待查看";
     
     public GitHubAuthService GitHubAuthService { get; } = gitHubAuthService;
     public DiscussionService DiscussionService { get; } = discussionService;
@@ -23,11 +24,13 @@ public class IssueWebhookProcessorService(GitHubAuthService gitHubAuthService, D
         // 判断是否属于功能请求类 Issue
         if (!issuesEvent.Issue.Labels.Any(x => x.Name is FeatureTagName or ImprovementTagName))
             return;
-        
-        
+
+
+        var validForAddDiscussion = issuesEvent.Issue.State?.Value == IssueState.Open && !issuesEvent.Issue.Labels.Any(x => x.Name is VotingTagName or WipTagName or ReviewingTagName);
         switch (action)
         {
-            case "labeled" when issuesEvent.Issue.State?.Value == IssueState.Open && !issuesEvent.Issue.Labels.Any(x => x.Name is VotingTagName or WipTagName):
+            case "unlabeled" when validForAddDiscussion:
+            case "labeled" when validForAddDiscussion:
                 await DiscussionService.ConnectDiscussionAsync(issuesEvent.Repository?.NodeId ?? "", issuesEvent.Issue.NodeId, issuesEvent.Issue);
                 break;
             

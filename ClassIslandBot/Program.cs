@@ -54,4 +54,13 @@ using (var scope = app.Services.CreateScope())
 }
 #endif
 
+using (var scope = app.Services.CreateScope())
+{
+    var discussion = scope.ServiceProvider.GetService<DiscussionService>();
+    if (discussion != null)
+    {
+        await discussion.SyncUnConnectedIssuesAsync();
+    }
+}
+
 app.Run();
