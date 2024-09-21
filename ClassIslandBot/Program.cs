@@ -23,6 +23,7 @@ builder.Services.AddScoped<DiscussionService>();
 builder.Services.AddScoped<WebhookEventProcessor, IssueWebhookProcessorService>();
 
 builder.Services.AddDbContext<BotContext>();
+builder.WebHost.UseSentry();
 
 #if DEBUG
 builder.Logging.SetMinimumLevel(LogLevel.Trace);
