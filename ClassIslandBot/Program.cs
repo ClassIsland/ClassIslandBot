@@ -1,4 +1,6 @@
 using ClassIslandBot;
+using ClassIslandBot.Abstractions;
+using ClassIslandBot.Models;
 using ClassIslandBot.Services;
 using Microsoft.EntityFrameworkCore;
 using Octokit;
@@ -21,6 +23,16 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<GitHubAuthService>();
 builder.Services.AddScoped<DiscussionService>();
 builder.Services.AddScoped<WebhookEventProcessor, IssueWebhookProcessorService>();
+builder.Services.AddHostedService<IssueProcessBackgroundWorker>();
+builder.Services.AddSingleton<IBackgroundTaskQueue>(_ => 
+{
+    if (!int.TryParse(builder.Configuration["QueueCapacity"], out var queueCapacity))
+    {
+        queueCapacity = 100;
+    }
+
+    return new IssueProcessBackgroundTaskQueue(queueCapacity);
+});
 
 builder.Services.AddDbContext<BotContext>();
 builder.WebHost.UseSentry();
