@@ -58,6 +58,7 @@ if (github != null)
 
 // app.UseHttpsRedirection();
 app.MapGitHubWebhooks(secret:app.Configuration["WebhookSecret"] ?? "");
+app.UseSentryTracing();
 
 #if DEBUG  // 处于开发环境时需要自动迁移
 using (var scope = app.Services.CreateScope())
