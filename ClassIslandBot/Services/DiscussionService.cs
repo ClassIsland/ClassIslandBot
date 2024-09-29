@@ -11,6 +11,7 @@ using ProductHeaderValue = Octokit.GraphQL.ProductHeaderValue;
 using Repository = Octokit.GraphQL.Model.Repository;
 using static Octokit.GraphQL.Variable;
 using Label = Octokit.Label;
+using LockReason = Octokit.GraphQL.Model.LockReason;
 
 namespace ClassIslandBot.Services;
 
@@ -24,16 +25,21 @@ public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext d
         ***
         
         > [!note]
-        > 这个 Discussion 复制自 Issue <{1}> 。点击左下角的“↑”来给这个功能进行投票，开发者会优先处理票数较高的帖子。
+        > 这个 Discussion 搬运自 Issue <{1}> 。点击左下角的“↑”来给这个功能进行投票，开发者会优先处理票数较高的帖子。
         >
-        > 请在源 Issue 下进行讨论，不要在这个 Discussion 下面发表评论，**否则您的评论可能会在清除此 Discussion 时被清除**。
+        > 建议在源 Issue 下进行讨论。
         """;
+
+    private const string DiscussionReference =
+        "此功能请求已开始在投票贴 <{0}> 投票，欢迎前来为你想要的功能投票。";
 
     private const string VotingRepoId = "R_kgDOM02_VQ";
 
     private static readonly FrozenDictionary<string, string> RepoMapping = (new Dictionary<string, string>()
             {
+#if !DEBUG
                 { "R_kgDOJ5IdFQ", "ClassIsland" },  // ClassIsland/ClassIsland
+#endif
                 { "R_kgDOMyT8rg", "sandbox" },  // ClassIsland/sandbox
             }
         ).ToFrozenDictionary();
@@ -99,7 +105,8 @@ public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext d
             .Select(x => new
             {
                 Id = x.ClientMutationId,
-                DiscussionId = x.Discussion.Id
+                DiscussionId = x.Discussion.Id,
+                Url = x.Discussion.Url
             })
             .Compile();
         var mutationAddLabel = new Mutation()
@@ -117,11 +124,26 @@ public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext d
 
         var result =await connection.Run(mutationCreateDiscussion);
         await connection.Run(mutationAddLabel);
+        var mutationAddRefComment = new Mutation()
+            .AddComment(new Arg<AddCommentInput>(new AddCommentInput()
+            {
+                Body = string.Format(DiscussionReference, $"{result.Url}"),
+                SubjectId = new ID(issueId)
+            }))
+            .Select(x =>
+                new
+                {
+                    x.ClientMutationId,
+                    x.CommentEdge.Node.Id
+                })
+            .Compile();
+        var resultAddRefComment = await connection.Run(mutationAddRefComment);
         await DbContext.DiscussionAssociations.AddAsync(new DiscussionAssociation()
         {
             RepoId = repoId,
             IssueId = issueId,
-            DiscussionId = result.DiscussionId.ToString()
+            DiscussionId = result.DiscussionId.ToString(),
+            RefCommentId = resultAddRefComment.Id.ToString()
         });
         await DbContext.SaveChangesAsync();
         Logger.LogTrace("Process #{} done", issue.Number);
@@ -145,9 +167,20 @@ public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext d
         
         
         var mutation = new Mutation()
-            .DeleteDiscussion(new Arg<DeleteDiscussionInput>(new DeleteDiscussionInput()
+            .CloseDiscussion(new Arg<CloseDiscussionInput>(new CloseDiscussionInput()
             {
-                Id = new ID(association.DiscussionId)
+                DiscussionId = new ID(association.DiscussionId),
+                Reason = DiscussionCloseReason.Resolved,
+            }))
+            .Select(x => new
+            {
+                Id = x.ClientMutationId
+            })
+            .Compile();
+        var mutationLockDiscussion = new Mutation()
+            .LockLockable(new Arg<LockLockableInput>(new LockLockableInput()
+            {
+                LockableId = new ID(association.DiscussionId)
             }))
             .Select(x => new
             {
@@ -169,6 +202,7 @@ public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext d
 
         await connection.Run(mutationRmLabel);
         var result =await connection.Run(mutation);
+        await connection.Run(mutationLockDiscussion);
         association.IsTracking = false;
         await DbContext.SaveChangesAsync();
         Logger.LogTrace("Process #{} done", issue.Number);
