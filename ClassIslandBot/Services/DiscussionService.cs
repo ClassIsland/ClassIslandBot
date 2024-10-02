@@ -15,7 +15,8 @@ using LockReason = Octokit.GraphQL.Model.LockReason;
 
 namespace ClassIslandBot.Services;
 
-public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext dbContext, ILogger<DiscussionService> logger)
+public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext dbContext, ILogger<DiscussionService> logger,
+    GithubOperationService githubOperationService)
 {
     private const string FeatureSurveyDiscussionCategorySlug = "功能投票";
 
@@ -47,6 +48,7 @@ public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext d
     private GitHubAuthService GitHubAuthService { get; } = gitHubAuthService;
     private BotContext DbContext { get; } = dbContext;
     private ILogger<DiscussionService> Logger { get; } = logger;
+    public GithubOperationService GithubOperationService { get; } = githubOperationService;
 
     private async Task<ID> GetDiscussionCategoryIdBySlugAsync(Connection connection, string slug)
     {
@@ -64,20 +66,6 @@ public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext d
         return categoryId;
     }
     
-    private async Task<ID> GetLabelIdByNameAsync(Connection connection, string repoId, string name)
-    {
-        var qLabel = new Query()
-            .Node(new ID(repoId))
-            .Cast<Repository>()
-            .Label(name)
-            .Select(x => new
-            {
-                Id = x.Id,
-            })
-            .Compile();
-        return (await connection.Run(qLabel)).Id;
-    }
-
     public async Task ConnectDiscussionAsync(string repoId, string issueId, Issue issue)
     {
         if (await DbContext.DiscussionAssociations.AnyAsync(x => x.IssueId == issueId))
@@ -106,44 +94,20 @@ public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext d
             {
                 Id = x.ClientMutationId,
                 DiscussionId = x.Discussion.Id,
-                Url = x.Discussion.Url
+                Url = x.Discussion.Url,
             })
             .Compile();
-        var mutationAddLabel = new Mutation()
-            .AddLabelsToLabelable(new Arg<AddLabelsToLabelableInput>(new AddLabelsToLabelableInput()
-            {
-                LabelIds = [await GetLabelIdByNameAsync(connection, repoId, IssueWebhookProcessorService.VotingTagName)],
-                LabelableId = new ID(issueId)
-            }))
-            .Select(x => new
-            {
-                Id = x.ClientMutationId
-            })
-            .Compile();
-
-
+        
         var result =await connection.Run(mutationCreateDiscussion);
-        await connection.Run(mutationAddLabel);
-        var mutationAddRefComment = new Mutation()
-            .AddComment(new Arg<AddCommentInput>(new AddCommentInput()
-            {
-                Body = string.Format(DiscussionReference, $"{result.Url}"),
-                SubjectId = new ID(issueId)
-            }))
-            .Select(x =>
-                new
-                {
-                    x.ClientMutationId,
-                    x.CommentEdge.Node.Id
-                })
-            .Compile();
-        var resultAddRefComment = await connection.Run(mutationAddRefComment);
+        await GithubOperationService.AddLabelByNameAsync(new ID(issueId), IssueWebhookProcessorService.VotingTagName,
+            new ID(repoId));
+        var commentId = await GithubOperationService.AddCommentAsync(new ID(issueId), string.Format(DiscussionReference, $"{result.Url}"));
         await DbContext.DiscussionAssociations.AddAsync(new DiscussionAssociation()
         {
             RepoId = repoId,
             IssueId = issueId,
             DiscussionId = result.DiscussionId.ToString(),
-            RefCommentId = resultAddRefComment.Id.ToString()
+            RefCommentId = commentId.ToString()
         });
         await DbContext.SaveChangesAsync();
         Logger.LogTrace("Process #{} done", issue.Number);
@@ -162,47 +126,10 @@ public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext d
             return;
         }
         
-        var connection = new Connection(new ProductHeaderValue(GitHubAuthService.GitHubAppName), 
-            await GitHubAuthService.GetInstallationTokenAsync());
-        
-        
-        var mutation = new Mutation()
-            .CloseDiscussion(new Arg<CloseDiscussionInput>(new CloseDiscussionInput()
-            {
-                DiscussionId = new ID(association.DiscussionId),
-                Reason = DiscussionCloseReason.Resolved,
-            }))
-            .Select(x => new
-            {
-                Id = x.ClientMutationId
-            })
-            .Compile();
-        var mutationLockDiscussion = new Mutation()
-            .LockLockable(new Arg<LockLockableInput>(new LockLockableInput()
-            {
-                LockableId = new ID(association.DiscussionId)
-            }))
-            .Select(x => new
-            {
-                Id = x.ClientMutationId
-            })
-            .Compile();
-        var mutationRmLabel = new Mutation()
-            .RemoveLabelsFromLabelable(new Arg<RemoveLabelsFromLabelableInput>(new RemoveLabelsFromLabelableInput()
-            {
-                LabelIds = [await GetLabelIdByNameAsync(connection, repoId, IssueWebhookProcessorService.VotingTagName)],
-                LabelableId = new ID(issueId)
-            }))
-            .Select(x => new
-            {
-                Id = x.ClientMutationId
-            })
-            .Compile();
-
-
-        await connection.Run(mutationRmLabel);
-        var result =await connection.Run(mutation);
-        await connection.Run(mutationLockDiscussion);
+        await GithubOperationService.RemoveLabelByNameAsync(new ID(issueId), IssueWebhookProcessorService.VotingTagName,
+            new ID(repoId));
+        await GithubOperationService.CloseDiscussionAsync(new ID(association.DiscussionId));
+        await GithubOperationService.LockLockableAsync(new ID(association.DiscussionId));
         association.IsTracking = false;
         await DbContext.SaveChangesAsync();
         Logger.LogTrace("Process #{} done", issue.Number);
@@ -261,5 +188,6 @@ public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext d
 
             } while (vars["after"] != null);
         }
+        Logger.LogInformation("Synced untracked issues");
     }
 }
