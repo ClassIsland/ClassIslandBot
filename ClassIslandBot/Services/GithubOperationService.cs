@@ -20,8 +20,8 @@ public class GithubOperationService(GitHubAuthService gitHubAuthService)
         var q = new Mutation()
             .AddComment(new Arg<AddCommentInput>(new AddCommentInput()
             {
-                Body = Var("Body").ToString(),
-                SubjectId = new ID(Var("SubjectId").ToString())
+                Body = body,
+                SubjectId = subjectId
             }))
             .Select(x =>
                 new
@@ -31,11 +31,7 @@ public class GithubOperationService(GitHubAuthService gitHubAuthService)
                 })
             .Compile();
         var connection = await GetConnectionAsync();
-        return (await connection.Run(q, new Dictionary<string, object>()
-        {
-            { "Body", body },
-            { "SubjectId", subjectId },
-        })).Id;
+        return (await connection.Run(q)).Id;
     }
 
     public async Task LockLockableAsync(ID id)
@@ -118,6 +114,11 @@ public class GithubOperationService(GitHubAuthService gitHubAuthService)
             })
             .Compile();
         await connection.Run(mutationAddLabel);
+    }
+
+    public async Task<bool> ValidateMemberAccessByNameAsync(IEnumerable<string> authorAssociation)
+    {
+        return false;
     }
 
     public async Task<Discussion> CreateDiscussionAsync(ID repoId, string title, string categoryName, string body)

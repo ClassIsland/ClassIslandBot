@@ -2,6 +2,7 @@ using ClassIslandBot.Abstractions;
 using Octokit.GraphQL;
 using Octokit.Webhooks;
 using Octokit.Webhooks.Events;
+using Octokit.Webhooks.Events.IssueComment;
 using Octokit.Webhooks.Events.Issues;
 using Octokit.Webhooks.Models;
 
@@ -36,6 +37,22 @@ public class IssueWebhookProcessorService(GitHubAuthService gitHubAuthService,
             await using var scope = serviceScopeFactory.CreateAsyncScope();
             var discussionService = scope.ServiceProvider.GetRequiredService<DiscussionService>();
             await ProcessIssue(issuesEvent, action, discussionService);
+        });
+    }
+
+    protected override async Task ProcessIssueCommentWebhookAsync(WebhookHeaders headers, IssueCommentEvent issueCommentEvent,
+        IssueCommentAction action)
+    {
+        Logger.LogInformation("Received issue comment event: {} {}", issueCommentEvent.Issue.Id, issueCommentEvent.Action);
+        if (issueCommentEvent.Action != "created")
+        {
+            return;
+        }
+        await TaskQueue.QueueBackgroundWorkItemAsync(async (_) =>
+        {
+            await using var scope = serviceScopeFactory.CreateAsyncScope();
+            var service = scope.ServiceProvider.GetRequiredService<IssueCommandProcessService>();
+            await service.ProcessCommandAsync(issueCommentEvent.Issue.NodeId, issueCommentEvent.Comment.NodeId, issueCommentEvent);
         });
     }
 

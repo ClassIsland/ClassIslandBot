@@ -24,6 +24,8 @@ builder.Services.AddSingleton<GitHubAuthService>();
 builder.Services.AddScoped<DiscussionService>();
 builder.Services.AddScoped<WebhookEventProcessor, IssueWebhookProcessorService>();
 builder.Services.AddHostedService<IssueProcessBackgroundWorker>();
+builder.Services.AddScoped<IssueCommandProcessService>();
+builder.Services.AddSingleton<GithubOperationService>();
 builder.Services.AddSingleton<IBackgroundTaskQueue>(_ => 
 {
     if (!int.TryParse(builder.Configuration["QueueCapacity"], out var queueCapacity))
