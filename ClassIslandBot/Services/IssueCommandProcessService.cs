@@ -58,11 +58,6 @@ public partial class IssueCommandProcessService(GithubOperationService githubOpe
                 await GithubOperationService.AddCommentAsync(new ID(issueId),
                     WrapComment(PingCommentTemplate));
                 break;
-            case "re-track-voting":
-                break;
-            case "stop-voting":
-                await DiscussionService.DeleteDiscussionAsCompletedAsync()
-                break;
         }
 
         return;

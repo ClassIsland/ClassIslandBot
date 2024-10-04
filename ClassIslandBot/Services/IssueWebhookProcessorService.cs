@@ -4,6 +4,7 @@ using Octokit.Webhooks;
 using Octokit.Webhooks.Events;
 using Octokit.Webhooks.Events.IssueComment;
 using Octokit.Webhooks.Events.Issues;
+using Octokit.Webhooks.Events.Release;
 using Octokit.Webhooks.Models;
 
 namespace ClassIslandBot.Services;
@@ -54,6 +55,11 @@ public class IssueWebhookProcessorService(GitHubAuthService gitHubAuthService,
             var service = scope.ServiceProvider.GetRequiredService<IssueCommandProcessService>();
             await service.ProcessCommandAsync(issueCommentEvent.Issue.NodeId, issueCommentEvent.Comment.NodeId, issueCommentEvent);
         });
+    }
+
+    protected override async Task ProcessReleaseWebhookAsync(WebhookHeaders headers, ReleaseEvent releaseEvent, ReleaseAction action)
+    {
+        Logger.LogInformation("Received issue comment event: {}", action);
     }
 
     private async Task ProcessIssue(IssuesEvent issuesEvent, IssuesAction action, DiscussionService discussionService)

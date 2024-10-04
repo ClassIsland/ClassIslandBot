@@ -66,11 +66,11 @@ public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext d
         return categoryId;
     }
     
-    public async Task ConnectDiscussionAsync(string repoId, string issueId, Issue issue)
+    public async Task ConnectDiscussionAsync(string repoId, string issueId, Issue? issue=null)
     {
         if (await DbContext.DiscussionAssociations.AnyAsync(x => x.IssueId == issueId))
         {
-            Logger.LogInformation("Skipped adding issue #{} for duplicated", issue.Number);
+            Logger.LogInformation("Skipped adding issue {} for duplicated", issueId);
             return;
         }
 
@@ -82,13 +82,34 @@ public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext d
         var connection = new Connection(new ProductHeaderValue(GitHubAuthService.GitHubAppName), 
             await GitHubAuthService.GetInstallationTokenAsync());
 
+        var queryIssueInfo = new Query()
+            .Node(new ID(issueId))
+            .Cast<Octokit.GraphQL.Model.Issue>()
+            .Select(x => new
+            {
+                x.Body,
+                Number = (long)x.Number,
+                x.Url,
+                x.Title
+            })
+            .Compile();
+        var issueInfo = issue == null
+            ? await connection.Run(queryIssueInfo)
+            : new
+            {
+                Body = issue.Body ?? "",
+                Number = issue.Number,
+                Url = issue.HtmlUrl,
+                Title = issue.Title
+            };
+
         var mutationCreateDiscussion = new Mutation()
             .CreateDiscussion(new Arg<CreateDiscussionInput>(new CreateDiscussionInput()
             {
                 RepositoryId = new ID(VotingRepoId),
                 CategoryId = await GetDiscussionCategoryIdBySlugAsync(connection, discussionCategory),
-                Body = issue.Body + string.Format(DiscussionTail, $"#{issue.Number}", issue.HtmlUrl),
-                Title = issue.Title,
+                Body = issueInfo.Body + string.Format(DiscussionTail, $"#{issueInfo.Number}", issueInfo.Url),
+                Title = issueInfo.Title,
             }))
             .Select(x => new
             {
@@ -110,15 +131,15 @@ public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext d
             RefCommentId = commentId.ToString()
         });
         await DbContext.SaveChangesAsync();
-        Logger.LogTrace("Process #{} done", issue.Number);
+        Logger.LogTrace("Process #{} done", issueInfo.Number);
     }
 
-    public async Task DeleteDiscussionAsCompletedAsync(string repoId, string issueId, Issue issue)
+    public async Task DeleteDiscussionAsCompletedAsync(string repoId, string issueId, Issue? issue=null)
     {
         var association = await DbContext.DiscussionAssociations.FirstOrDefaultAsync(x => x.IssueId == issueId && x.IsTracking);
         if (association == null)
         {
-            Logger.LogInformation("Skipped removing discussion associated to issue #{} for not existed or not tracking", issue.Number);
+            Logger.LogInformation("Skipped removing discussion associated to issue {} for not existed or not tracking", issueId);
             return;
         }
         if (!RepoMapping.TryGetValue(repoId, out var discussionCategory))
@@ -126,13 +147,37 @@ public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext d
             return;
         }
         
+        var connection = new Connection(new ProductHeaderValue(GitHubAuthService.GitHubAppName), 
+            await GitHubAuthService.GetInstallationTokenAsync());
+        
+        var queryIssueInfo = new Query()
+            .Node(new ID(issueId))
+            .Cast<Octokit.GraphQL.Model.Issue>()
+            .Select(x => new
+            {
+                x.Body,
+                Number = (long)x.Number,
+                x.Url,
+                x.Title
+            })
+            .Compile();
+        var issueInfo = issue == null
+            ? await connection.Run(queryIssueInfo)
+            : new
+            {
+                Body = issue.Body ?? "",
+                Number = issue.Number,
+                Url = issue.HtmlUrl,
+                Title = issue.Title
+            };
+        
         await GithubOperationService.RemoveLabelByNameAsync(new ID(issueId), IssueWebhookProcessorService.VotingTagName,
             new ID(repoId));
         await GithubOperationService.CloseDiscussionAsync(new ID(association.DiscussionId));
         await GithubOperationService.LockLockableAsync(new ID(association.DiscussionId));
         association.IsTracking = false;
         await DbContext.SaveChangesAsync();
-        Logger.LogTrace("Process #{} done", issue.Number);
+        Logger.LogTrace("Process #{} done", issueInfo.Number);
     }
 
     public async Task SyncUnConnectedIssuesAsync()
@@ -155,13 +200,7 @@ public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext d
                     x.TotalCount,
                     Items = x.Nodes.Select(y => new
                     {
-                        Issue = new Issue(){
-                            NodeId = y.Id.ToString(),
-                            Title = y.Title,
-                            Body = y.Body,
-                            HtmlUrl = y.Url,
-                            Number = y.Number,
-                        },
+                        IssueId = y.Id.ToString(),
                         Labels = y.Labels(100, null, null, null, null).Nodes.Select(label => new
                         {
                             label.Name
@@ -182,8 +221,8 @@ public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext d
                                  or IssueWebhookProcessorService.ReviewingTagName
                                  or IssueWebhookProcessorService.WipTagName)))
                 {
-                    Logger.LogInformation("Processing untracked issue #{} in {}: {}", i.Issue.Number, repo, i.Issue.Title);
-                    await ConnectDiscussionAsync(repo, i.Issue.NodeId.ToString(), i.Issue);
+                    Logger.LogInformation("Processing untracked issue {} in {}", i.IssueId, repo);
+                    await ConnectDiscussionAsync(repo, i.IssueId);
                 }
 
             } while (vars["after"] != null);
