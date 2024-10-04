@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using ClassIslandBot.Models.Entities;
+using ClassIslandBot.Services.Webhooks;
 using Microsoft.EntityFrameworkCore;
 using Octokit;
 using Octokit.GraphQL;

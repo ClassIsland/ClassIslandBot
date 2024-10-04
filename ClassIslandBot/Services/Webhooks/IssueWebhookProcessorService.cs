@@ -1,5 +1,4 @@
 using ClassIslandBot.Abstractions;
-using Octokit.GraphQL;
 using Octokit.Webhooks;
 using Octokit.Webhooks.Events;
 using Octokit.Webhooks.Events.IssueComment;
@@ -7,7 +6,7 @@ using Octokit.Webhooks.Events.Issues;
 using Octokit.Webhooks.Events.Release;
 using Octokit.Webhooks.Models;
 
-namespace ClassIslandBot.Services;
+namespace ClassIslandBot.Services.Webhooks;
 
 public class IssueWebhookProcessorService(GitHubAuthService gitHubAuthService, 
     DiscussionService discussionService, 
@@ -29,16 +28,28 @@ public class IssueWebhookProcessorService(GitHubAuthService gitHubAuthService,
     protected override async Task ProcessIssuesWebhookAsync(WebhookHeaders headers, IssuesEvent issuesEvent, IssuesAction action)
     {
         Logger.LogInformation("Received issue event: {} {}", issuesEvent.Issue.Id, issuesEvent.Action);
-        // 判断是否属于功能请求类 Issue
-        if (!issuesEvent.Issue.Labels.Any(x => x.Name is FeatureTagName or ImprovementTagName))
-            return;
-
+        
         await TaskQueue.QueueBackgroundWorkItemAsync(async (_) =>
         {
             await using var scope = serviceScopeFactory.CreateAsyncScope();
             var discussionService = scope.ServiceProvider.GetRequiredService<DiscussionService>();
-            await ProcessIssue(issuesEvent, action, discussionService);
+            await ProcessFeatureIssue(issuesEvent, action, discussionService);
+            var releaseTrackingService = scope.ServiceProvider.GetRequiredService<ReleaseTrackingService>();
+            await ProcessReleaseActions(issuesEvent, action, releaseTrackingService);
         });
+    }
+
+    private async Task ProcessReleaseActions(IssuesEvent issuesEvent, IssuesAction action, ReleaseTrackingService releaseTrackingService)
+    {
+        if (action != "closed")
+        {
+            return;
+        }
+
+        if (issuesEvent is IssuesClosedEvent issuesClosedEvent)
+        {
+            await releaseTrackingService.ProcessClosedIssueAsync(issuesClosedEvent);
+        }
     }
 
     protected override async Task ProcessIssueCommentWebhookAsync(WebhookHeaders headers, IssueCommentEvent issueCommentEvent,
@@ -57,13 +68,10 @@ public class IssueWebhookProcessorService(GitHubAuthService gitHubAuthService,
         });
     }
 
-    protected override async Task ProcessReleaseWebhookAsync(WebhookHeaders headers, ReleaseEvent releaseEvent, ReleaseAction action)
+    private async Task ProcessFeatureIssue(IssuesEvent issuesEvent, IssuesAction action, DiscussionService discussionService)
     {
-        Logger.LogInformation("Received issue comment event: {}", action);
-    }
-
-    private async Task ProcessIssue(IssuesEvent issuesEvent, IssuesAction action, DiscussionService discussionService)
-    {
+        if (!issuesEvent.Issue.Labels.Any(x => x.Name is FeatureTagName or ImprovementTagName))
+            return;
         var validForAddDiscussion = issuesEvent.Issue.State?.Value == IssueState.Open && !issuesEvent.Issue.Labels.Any(x => x.Name is VotingTagName or WipTagName or ReviewingTagName);
         switch (action)
         {
@@ -78,6 +86,7 @@ public class IssueWebhookProcessorService(GitHubAuthService gitHubAuthService,
             case "closed":
                 await discussionService.DeleteDiscussionAsCompletedAsync(issuesEvent.Repository?.NodeId ?? "",
                     issuesEvent.Issue.NodeId, issuesEvent.Issue);
+                
                 break;
         }
     }
@@ -85,6 +94,22 @@ public class IssueWebhookProcessorService(GitHubAuthService gitHubAuthService,
     protected override async Task ProcessPingWebhookAsync(WebhookHeaders headers, PingEvent pingEvent)
     {
         Logger.LogInformation("Ping!");
+    }
+    
+    protected override async Task ProcessReleaseWebhookAsync(WebhookHeaders headers, ReleaseEvent releaseEvent, ReleaseAction action)
+    {
+        Logger.LogInformation("Received release event: {} {}", releaseEvent.Release.TagName, releaseEvent.Action);
+
+        await TaskQueue.QueueBackgroundWorkItemAsync(async (_) =>
+        {
+            await using var scope = serviceScopeFactory.CreateAsyncScope();
+            if (action != "published" || releaseEvent is not ReleasePublishedEvent publishedEvent)
+            {
+                return;
+            }
+            var service = scope.ServiceProvider.GetRequiredService<ReleaseTrackingService>();
+            await service.ProcessReleaseNoteAsync(publishedEvent);
+        });
     }
     
 }

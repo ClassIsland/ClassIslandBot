@@ -9,7 +9,7 @@ public class GithubOperationService(GitHubAuthService gitHubAuthService)
 {
     private GitHubAuthService GitHubAuthService { get; } = gitHubAuthService;
 
-    private async Task<Connection> GetConnectionAsync()
+    public async Task<Connection> GetConnectionAsync()
     {
         return new Connection(new ProductHeaderValue(GitHubAuthService.GitHubAppName),
             await GitHubAuthService.GetInstallationTokenAsync());
