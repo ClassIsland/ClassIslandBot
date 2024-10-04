@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using Octokit.GraphQL;
 using Octokit.Webhooks.Events;
 using Octokit.Webhooks.Models;
+using Octokit.Webhooks.Models.CommitCommentEvent;
 
 namespace ClassIslandBot.Services;
 
@@ -16,8 +17,10 @@ public partial class IssueCommandProcessService(GithubOperationService githubOpe
 
     private static readonly string[] AuthorizedLevels = ["owner", "member"];
     
-    private const string UnAuthorizedCommentTemplate = 
-        "你没有进行此操作的权限。 ";
+    private const string UnAuthorizedCommentTemplate = "你没有进行此操作的权限。 ";
+    private const string TrackedIssueVotingCommentTemplate = "已开始对此 Issue 进行投票。 ";
+    private const string UnTrackedIssueVotingCommentTemplate = "已停止对此 Issue 进行投票。 ";
+    private const string ErrorCommentTemplate = "无法进行此操作，详见应用日志。";
     
     private const string PingCommentTemplate = 
         """
@@ -46,23 +49,41 @@ public partial class IssueCommandProcessService(GithubOperationService githubOpe
         if (issueCommentEvent.Repository?.Private != true &&
             !AuthorizedLevels.Contains(issueCommentEvent.Comment.AuthorAssociation.ToString().ToLower()))
         {
-            await GithubOperationService.AddCommentAsync(new ID(issueId),
-                WrapComment(UnAuthorizedCommentTemplate));
+            await Comment(UnAuthorizedCommentTemplate);
             return;
         }
 
         var commands = commandFull.ToString().Split(' ');
-        switch (commands[0])
+        try
         {
-            case "ping":
-                await GithubOperationService.AddCommentAsync(new ID(issueId),
-                    WrapComment(PingCommentTemplate));
-                break;
+            switch (commands[0])
+            {
+                case "ping":
+                    await Comment(PingCommentTemplate);
+                    break;
+                case "track_voting":
+                    await DiscussionService.ConnectDiscussionAsync(issueCommentEvent.Repository?.NodeId ?? ""
+                        , issueCommentEvent.Issue.NodeId, force:true);
+                    await Comment(TrackedIssueVotingCommentTemplate);
+                    break;
+                case "untrack_voting":
+                    await DiscussionService.DeleteDiscussionAsCompletedAsync(issueCommentEvent.Repository?.NodeId ?? ""
+                        , issueCommentEvent.Issue.NodeId);
+                    await Comment(UnTrackedIssueVotingCommentTemplate);
+                    break;
+            }
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Unable to execute command {}", commandFull);
+            await Comment(ErrorCommentTemplate);
         }
 
         return;
 
         string WrapComment(string comment) => $"@{issueCommentEvent.Issue.User.Login} {comment}";
+        async Task Comment(string comment) => await GithubOperationService.AddCommentAsync(new ID(issueId),
+            WrapComment(comment));
     }
 
     

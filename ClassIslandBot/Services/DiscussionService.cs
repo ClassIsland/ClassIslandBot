@@ -66,9 +66,9 @@ public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext d
         return categoryId;
     }
     
-    public async Task ConnectDiscussionAsync(string repoId, string issueId, Issue? issue=null)
+    public async Task ConnectDiscussionAsync(string repoId, string issueId, Issue? issue=null, bool force=false)
     {
-        if (await DbContext.DiscussionAssociations.AnyAsync(x => x.IssueId == issueId))
+        if (await DbContext.DiscussionAssociations.AnyAsync(x => x.IssueId == issueId) && !force)
         {
             Logger.LogInformation("Skipped adding issue {} for duplicated", issueId);
             return;
