@@ -81,7 +81,7 @@ public partial class IssueCommandProcessService(GithubOperationService githubOpe
 
         return;
 
-        string WrapComment(string comment) => $"@{issueCommentEvent.Issue.User.Login} {comment}";
+        string WrapComment(string comment) => $"@{issueCommentEvent.Comment.User.Login} {comment}";
         async Task Comment(string comment) => await GithubOperationService.AddCommentAsync(new ID(issueId),
             WrapComment(comment));
     }
