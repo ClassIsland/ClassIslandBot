@@ -43,7 +43,9 @@ public partial class IssueCommandProcessService(GithubOperationService githubOpe
         }
 
         var commandFull = match.Groups[1];
-        Logger.LogInformation("Process command: {} {}", issueCommentEvent.Comment.User.Login, commandFull);
+        Logger.LogInformation("Process command: {} {} {}", issueCommentEvent.Comment.User.Login, 
+            issueCommentEvent.Comment.AuthorAssociation.ToString().ToLower(),
+            commandFull);
         
         // authorize
         if (issueCommentEvent.Repository?.Private != true &&

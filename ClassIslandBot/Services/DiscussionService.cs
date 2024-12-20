@@ -40,8 +40,8 @@ public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext d
     private static readonly FrozenDictionary<string, string> RepoMapping = (new Dictionary<string, string>()
             {
 #if !DEBUG
-                { "R_kgDOJ5IdFQ", "ClassIsland" },  // ClassIsland/ClassIsland
 #endif
+                { "R_kgDOJ5IdFQ", "ClassIsland" },  // ClassIsland/ClassIsland
                 { "R_kgDOMyT8rg", "sandbox" },  // ClassIsland/sandbox
             }
         ).ToFrozenDictionary();
@@ -215,7 +215,7 @@ public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext d
             };
             do
             {
-                var result = await connection.Run(query);
+                var result = await connection.Run(query, vars);
                 vars["after"] = result.HasNextPage ? result.EndCursor : null;
                 foreach (var i in result.Items.Where(x => !x.Labels.Any(y =>
                              y.Name is IssueWebhookProcessorService.VotingTagName
