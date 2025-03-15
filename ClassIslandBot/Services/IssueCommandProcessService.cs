@@ -47,12 +47,12 @@ public partial class IssueCommandProcessService(GithubOperationService githubOpe
 
         var commandFull = match.Groups[1];
         Logger.LogInformation("Process command: {} {} {}", issueCommentEvent.Comment.User.Login, 
-            issueCommentEvent.Comment.AuthorAssociation.ToString().ToLower(),
+            issueCommentEvent.Comment.AuthorAssociation.StringValue.ToLower(),
             commandFull);
         
         // authorize
         if (issueCommentEvent.Repository?.Private != true &&
-            !AuthorizedLevels.Contains(issueCommentEvent.Comment.AuthorAssociation.ToString().ToLower()))
+            !AuthorizedLevels.Contains(issueCommentEvent.Comment.AuthorAssociation.StringValue.ToLower()))
         {
             await Comment(UnAuthorizedCommentTemplate);
             return;
