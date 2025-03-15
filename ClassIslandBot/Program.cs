@@ -1,3 +1,4 @@
+using System.ClientModel;
 using ClassIslandBot;
 using ClassIslandBot.Abstractions;
 using ClassIslandBot.Models;
@@ -11,6 +12,8 @@ using Octokit.GraphQL.Core.Builders;
 using Octokit.GraphQL.Model;
 using Octokit.Webhooks;
 using Octokit.Webhooks.AspNetCore;
+using OpenAI;
+using OpenAI.Chat;
 using static Octokit.GraphQL.Variable;
 using ProductHeaderValue = Octokit.ProductHeaderValue;
 
@@ -38,6 +41,11 @@ builder.Services.AddSingleton<IBackgroundTaskQueue>(_ =>
 
     return new IssueProcessBackgroundTaskQueue(queueCapacity);
 });
+builder.Services.AddSingleton<OpenAIClient>(_ => new OpenAIClient(new ApiKeyCredential(builder.Configuration["OpenAIKey"] ?? ""), new OpenAIClientOptions()
+{
+    Endpoint = new Uri(builder.Configuration["OpenAIEndPoint"] ?? "")
+}));
+builder.Services.AddSingleton<IssueLabelService>();
 
 builder.Services.AddDbContext<BotContext>();
 builder.WebHost.UseSentry();
@@ -73,6 +81,19 @@ using (var scope = app.Services.CreateScope())
 }
 #endif
 
+
+if (args.Length > 0 && args[0] == "migrate")
+{
+    using var scope = app.Services.CreateScope();
+    var discussion = scope.ServiceProvider.GetService<DiscussionService>();
+    if (discussion != null)
+    {
+        await discussion.MigrateDiscussions();
+    }
+
+    return;
+}
+
 using (var scope = app.Services.CreateScope())
 {
     var discussion = scope.ServiceProvider.GetService<DiscussionService>();
@@ -81,5 +102,4 @@ using (var scope = app.Services.CreateScope())
         await discussion.SyncUnConnectedIssuesAsync();
     }
 }
-
 app.Run();

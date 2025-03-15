@@ -1,4 +1,6 @@
 using ClassIslandBot.Abstractions;
+using ClassIslandBot.Helpers;
+using Octokit.GraphQL;
 using Octokit.Webhooks;
 using Octokit.Webhooks.Events;
 using Octokit.Webhooks.Events.IssueComment;
@@ -12,7 +14,8 @@ public class IssueWebhookProcessorService(GitHubAuthService gitHubAuthService,
     DiscussionService discussionService, 
     IServiceScopeFactory serviceScopeFactory,
     ILogger<IssueWebhookProcessorService> logger,
-    IBackgroundTaskQueue taskQueue) : WebhookEventProcessor
+    IBackgroundTaskQueue taskQueue, 
+    IssueLabelService issueLabelService) : WebhookEventProcessor
 {
     public const string FeatureTagName = "新功能";
     public const string ImprovementTagName = "功能优化";
@@ -24,7 +27,7 @@ public class IssueWebhookProcessorService(GitHubAuthService gitHubAuthService,
     public DiscussionService DiscussionService { get; } = discussionService;
     public ILogger<IssueWebhookProcessorService> Logger { get; } = logger;
     public IBackgroundTaskQueue TaskQueue { get; } = taskQueue;
-
+    public IssueLabelService IssueLabelService { get; } = issueLabelService;
     protected override async Task ProcessIssuesWebhookAsync(WebhookHeaders headers, IssuesEvent issuesEvent, IssuesAction action)
     {
         Logger.LogInformation("Received issue event: {} {}", issuesEvent.Issue.Id, issuesEvent.Action);
@@ -36,6 +39,16 @@ public class IssueWebhookProcessorService(GitHubAuthService gitHubAuthService,
             await ProcessFeatureIssue(issuesEvent, action, discussionService);
             var releaseTrackingService = scope.ServiceProvider.GetRequiredService<ReleaseTrackingService>();
             await ProcessReleaseActions(issuesEvent, action, releaseTrackingService);
+
+            if (action == "opened")
+            {
+                var body = IssueBodyHelpers.ExtractBetweenHeadings(issuesEvent.Issue.Body ?? "",
+                    issuesEvent.Issue.Labels.Any(x => x.Name is FeatureTagName or ImprovementTagName)
+                        ? "### 背景与动机"
+                        : "### Bug 信息", "### 最后一步");
+                await IssueLabelService.LabelIssueAsync(body ?? "", new ID(issuesEvent.Issue.NodeId),
+                    new ID(issuesEvent.Repository?.NodeId));
+            }
         });
     }
 

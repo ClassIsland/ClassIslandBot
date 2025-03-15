@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Text.RegularExpressions;
 using ClassIslandBot.Models.Entities;
 using ClassIslandBot.Services.Webhooks;
 using Microsoft.EntityFrameworkCore;
@@ -16,7 +17,7 @@ using LockReason = Octokit.GraphQL.Model.LockReason;
 
 namespace ClassIslandBot.Services;
 
-public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext dbContext, ILogger<DiscussionService> logger,
+public partial class DiscussionService(GitHubAuthService gitHubAuthService, BotContext dbContext, ILogger<DiscussionService> logger,
     GithubOperationService githubOperationService)
 {
     private const string FeatureSurveyDiscussionCategorySlug = "功能投票";
@@ -40,8 +41,8 @@ public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext d
     private static readonly FrozenDictionary<string, string> RepoMapping = (new Dictionary<string, string>()
             {
 #if !DEBUG
-#endif
                 { "R_kgDOJ5IdFQ", "ClassIsland" },  // ClassIsland/ClassIsland
+#endif
                 { "R_kgDOMyT8rg", "sandbox" },  // ClassIsland/sandbox
             }
         ).ToFrozenDictionary();
@@ -230,4 +231,102 @@ public class DiscussionService(GitHubAuthService gitHubAuthService, BotContext d
         }
         Logger.LogInformation("Synced untracked issues");
     }
+
+    public async Task MigrateDiscussions()
+    {
+        var regex = DiscussionMatchingRegex();
+        var connection = new Connection(new ProductHeaderValue(GitHubAuthService.GitHubAppName), 
+            await GitHubAuthService.GetInstallationTokenAsync());
+        foreach (var (repo, category) in RepoMapping)
+        {
+            var categoryId = await GetDiscussionCategoryIdBySlugAsync(connection, category);
+            var query = new Query()
+                .Node(new ID(VotingRepoId))
+                .Cast<Repository>()
+                .Discussions(first: 100, states: new Arg<IEnumerable<DiscussionState>>([DiscussionState.Open]),
+                    after: Var("after"), categoryId: categoryId)
+                .Select(x => new
+                {
+                    x.PageInfo.EndCursor,
+                    x.PageInfo.HasNextPage,
+                    x.TotalCount,
+                    Items = x.Nodes.Select(y => new
+                    {
+                        Id = y.Id.ToString(),
+                        Body = y.Body,
+                        Number = y.Number,
+                    }).ToList(),
+                })
+                .Compile();
+            var vars = new Dictionary<string, object?>
+            {
+                { "after", null },
+            };
+            do
+            {
+                var result = await connection.Run(query, vars);
+                vars["after"] = result.HasNextPage ? result.EndCursor : null;
+                foreach (var i in result.Items)
+                {
+                    if (await DbContext.DiscussionAssociations.FirstOrDefaultAsync(x => x.DiscussionId == i.Id) != null)
+                    {
+                        continue;
+                    }
+                    try
+                    {
+
+                        var matches = regex.Match(i.Body);
+                        if (matches.Groups.Count <= 1)
+                        {
+                            continue;
+                        }
+
+                        var issueNumber = int.Parse(matches.Groups[1].Value);
+                        var queryIssue = new Query()
+                            .Node(new ID(repo))
+                            .Cast<Repository>()
+                            .Issue(issueNumber)
+                            .Select(x => new
+                            {
+                                Id = x.Id,
+                                Number = x.Number,
+                                State = x.State
+                            })
+                            .Compile();
+                        var issue = await connection.Run(queryIssue);
+                        if (issue == null)
+                        {
+                            continue;
+                        }
+                        var closed = issue.State != IssueState.Open;
+                        
+                        Logger.LogInformation("Connecting discussion #{} -> #{} {}", i.Number, issue.Number, issue.State);
+                        var discussionAssociation = new DiscussionAssociation()
+                        {
+                            RepoId = repo,
+                            DiscussionId = i.Id,
+                            IssueId = issue.Id.ToString(),
+                            IsTracking = true  // 需要设定为 true，不然就不能关闭投票
+                        };
+                        DbContext.DiscussionAssociations.Add(discussionAssociation);
+                        await DbContext.SaveChangesAsync();
+                        if (closed)
+                        {
+                            await DeleteDiscussionAsCompletedAsync(repo, issue.Id.ToString());
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        Logger.LogError(e, "Unable to connect discussion #{}", i.Number);
+                    }
+
+                    Console.ReadLine();
+                }
+
+            } while (vars["after"] != null);
+        }
+    }
+
+    [GeneratedRegex(@"这个 Discussion 复制自 Issue \<https\:\/\/github.com\/ClassIsland\/ClassIsland\/issues\/(\d+)\> 。")]
+    private static partial Regex DiscussionMatchingRegex();
 }
