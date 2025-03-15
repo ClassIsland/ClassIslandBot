@@ -1,7 +1,18 @@
+using ClassIslandBot.Services.Webhooks;
+
 namespace ClassIslandBot.Helpers;
 
 public static class IssueBodyHelpers
 {
+    public static string ExtractIssue(string body, IEnumerable<string> tagNames)
+    {
+        return ExtractBetweenHeadings(body ?? "",
+            tagNames.Any(x => x is IssueWebhookProcessorService.FeatureTagName or IssueWebhookProcessorService.ImprovementTagName)
+                ? "### 背景与动机"
+                : "### Bug 信息", 
+            "### 最后一步");
+    }
+    
     public static string ExtractBetweenHeadings(string text, string startHeading, string endHeading)
     {
         // 分割文本为行数组，兼容不同换行符

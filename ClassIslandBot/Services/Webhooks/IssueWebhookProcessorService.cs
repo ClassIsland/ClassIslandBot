@@ -42,11 +42,9 @@ public class IssueWebhookProcessorService(GitHubAuthService gitHubAuthService,
 
             if (action == "opened")
             {
-                var body = IssueBodyHelpers.ExtractBetweenHeadings(issuesEvent.Issue.Body ?? "",
-                    issuesEvent.Issue.Labels.Any(x => x.Name is FeatureTagName or ImprovementTagName)
-                        ? "### 背景与动机"
-                        : "### Bug 信息", "### 最后一步");
-                await IssueLabelService.LabelIssueAsync(body ?? "", new ID(issuesEvent.Issue.NodeId),
+                await IssueLabelService.LabelIssueAsync(
+                    IssueBodyHelpers.ExtractIssue(issuesEvent.Issue.Body ?? "",
+                        issuesEvent.Issue.Labels.Select(x => x.Name)), new ID(issuesEvent.Issue.NodeId),
                     new ID(issuesEvent.Repository?.NodeId));
             }
         });

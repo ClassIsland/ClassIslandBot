@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using ClassIslandBot.Helpers;
 using Octokit.GraphQL;
 using Octokit.Webhooks.Events;
 using Octokit.Webhooks.Models;
@@ -9,11 +10,13 @@ namespace ClassIslandBot.Services;
 
 public partial class IssueCommandProcessService(GithubOperationService githubOperationService, 
     ILogger<IssueCommandProcessService> logger,
-    DiscussionService discussionService)
+    DiscussionService discussionService,
+    IssueLabelService issueLabelService)
 {
     public GithubOperationService GithubOperationService { get; } = githubOperationService;
     public ILogger<IssueCommandProcessService> Logger { get; } = logger;
     public DiscussionService DiscussionService { get; } = discussionService;
+    public IssueLabelService IssueLabelService { get; } = issueLabelService;
 
     private static readonly string[] AuthorizedLevels = ["owner", "member"];
     
@@ -72,6 +75,12 @@ public partial class IssueCommandProcessService(GithubOperationService githubOpe
                     await DiscussionService.DeleteDiscussionAsCompletedAsync(issueCommentEvent.Repository?.NodeId ?? ""
                         , issueCommentEvent.Issue.NodeId);
                     await Comment(UnTrackedIssueVotingCommentTemplate);
+                    break;
+                case "label":
+                    await IssueLabelService.LabelIssueAsync(
+                        IssueBodyHelpers.ExtractIssue(issueCommentEvent.Issue.Body ?? "",
+                            issueCommentEvent.Issue.Labels.Select(x => x.Name)), new ID(issueCommentEvent.Issue.NodeId),
+                        new ID(issueCommentEvent.Repository?.NodeId));
                     break;
             }
         }
