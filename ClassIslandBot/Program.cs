@@ -56,6 +56,8 @@ builder.Logging.SetMinimumLevel(LogLevel.Trace);
 
 var app = builder.Build();
 
+app.UseDefaultFiles();
+app.UseStaticFiles();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -102,4 +104,5 @@ using (var scope = app.Services.CreateScope())
         await discussion.SyncUnConnectedIssuesAsync();
     }
 }
+app.MapFallbackToFile("/index.html");
 app.Run();
