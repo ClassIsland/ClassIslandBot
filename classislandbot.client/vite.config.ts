@@ -1,7 +1,13 @@
 import { fileURLToPath, URL } from 'node:url';
 
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vite'
+import AutoImport from 'unplugin-auto-import/vite'
+import Components from 'unplugin-vue-components/vite'
+import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import plugin from '@vitejs/plugin-vue';
+import tailwindcss from '@tailwindcss/vite';
+import VueDevTools from 'vite-plugin-vue-devtools';
+import IconsResolver from 'unplugin-icons/resolver';
 import fs from 'fs';
 import path from 'path';
 import child_process from 'child_process';
@@ -39,7 +45,38 @@ const target = env.ASPNETCORE_HTTPS_PORT ? `https://localhost:${env.ASPNETCORE_H
 
 // https://vitejs.dev/config/
 export default defineConfig({
-    plugins: [plugin()],
+    plugins: [
+      plugin(),
+      tailwindcss(),
+      VueDevTools({ launchEditor: 'rider' }),
+      AutoImport({
+        resolvers: [
+          ElementPlusResolver({
+            importStyle: "sass"
+          }),
+          IconsResolver({
+            prefix: 'Icon',
+          }),
+        ],
+      }),
+      Components({
+        resolvers: [
+          ElementPlusResolver({
+            importStyle: "sass"
+          }),
+          IconsResolver({
+            enabledCollections: ['ep'],
+          }),
+        ],
+      }),
+    ],
+    css: {
+      preprocessorOptions: {
+        scss: {
+          additionalData: `@use "@/assets/base.scss";`,
+        },
+      },
+    },
     resolve: {
         alias: {
             '@': fileURLToPath(new URL('./src', import.meta.url))
@@ -47,7 +84,7 @@ export default defineConfig({
     },
     server: {
         proxy: {
-            '^/weatherforecast': {
+            '^/api': {
                 target,
                 secure: false
             }
