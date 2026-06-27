@@ -57,6 +57,10 @@ export default defineConfig({
             '^/api': {
                 target,
                 secure: false
+            },
+            '^/auth/github/callback': {
+                target,
+                secure: false
             }
         },
         port: parseInt(env.DEV_SERVER_PORT || '50069')

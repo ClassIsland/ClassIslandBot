@@ -2,12 +2,14 @@ using ClassIslandBot.Abstractions;
 using ClassIslandBot.ComponentModels;
 using ClassIslandBot.Models.Entities;
 using ClassIslandBot.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace ClassIslandBot.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("/api/v1/discussions")]
 public class DiscussionAssociationsController(
     BotContext dbContext,

@@ -133,6 +133,15 @@ export interface GitHubIssueOption {
   state?: string | null;
   url?: string | null;
 }
+export interface CurrentUserResponse {
+  isAuthenticated?: boolean;
+  id?: string | null;
+  login?: string | null;
+  name?: string | null;
+  avatarUrl?: string | null;
+  htmlUrl?: string | null;
+  organization?: string | null;
+}
 declare global {
   interface Apis {
     DiscussionAssociations: {
@@ -379,6 +388,75 @@ declare global {
       MigrateDiscussions<Config extends Alova2MethodConfig<null>>(
         config?: Config
       ): Alova2Method<null, 'DiscussionAssociations.MigrateDiscussions', Config>;
+    };
+    Auth: {
+      /**
+       * ---
+       *
+       * [GET]
+       *
+       * **path:** /api/v1/auth/login
+       *
+       * ---
+       *
+       * **Query Parameters**
+       * ```ts
+       * type QueryParameters = {
+       *   returnUrl?: string
+       * }
+       * ```
+       */
+      login<
+        Config extends Alova2MethodConfig<null> & {
+          params: {
+            returnUrl?: string;
+          };
+        }
+      >(
+        config: Config
+      ): Alova2Method<null, 'Auth.login', Config>;
+      /**
+       * ---
+       *
+       * [GET]
+       *
+       * **path:** /api/v1/auth/me
+       *
+       * ---
+       *
+       * **Response**
+       * ```ts
+       * type Response = {
+       *   isAuthenticated?: boolean
+       *   id?: string | null
+       *   login?: string | null
+       *   name?: string | null
+       *   avatarUrl?: string | null
+       *   htmlUrl?: string | null
+       *   organization?: string | null
+       * }
+       * ```
+       */
+      me<Config extends Alova2MethodConfig<CurrentUserResponse>>(
+        config?: Config
+      ): Alova2Method<CurrentUserResponse, 'Auth.me', Config>;
+      /**
+       * ---
+       *
+       * [POST]
+       *
+       * **path:** /api/v1/auth/logout
+       *
+       * ---
+       *
+       * **Response**
+       * ```ts
+       * type Response = null
+       * ```
+       */
+      logout<Config extends Alova2MethodConfig<null>>(
+        config?: Config
+      ): Alova2Method<null, 'Auth.logout', Config>;
     };
     GitHubMetadata: {
       /**

@@ -1,9 +1,11 @@
 using ClassIslandBot.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClassIslandBot.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("/api/v1/github")]
 public class GitHubMetadataController(GithubOperationService githubOperationService) : ControllerBase
 {

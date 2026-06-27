@@ -24,6 +24,9 @@
         <PackageReference Include="Octokit.GraphQL" Version="0.4.0-beta" />
         <PackageReference Include="Octokit.Webhooks.AspNetCore" Version="2.2.3" />
         <PackageReference Include="OpenAI" Version="2.1.0" />
+        <PackageReference Include="OpenIddict.Client.AspNetCore" Version="7.5.0" />
+        <PackageReference Include="OpenIddict.Client.SystemNetHttp" Version="7.5.0" />
+        <PackageReference Include="OpenIddict.Client.WebIntegration" Version="7.5.0" />
         <PackageReference Include="Sentry.AspNetCore" Version="3.34.0" />
         <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
         <PackageReference Include="System.CommandLine.Parser" Version="0.1.1" />

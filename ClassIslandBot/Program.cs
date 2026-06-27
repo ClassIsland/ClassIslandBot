@@ -3,7 +3,10 @@ using ClassIslandBot;
 using ClassIslandBot.Abstractions;
 using ClassIslandBot.Models;
 using ClassIslandBot.Services;
+using ClassIslandBot.Services.Authentication;
 using ClassIslandBot.Services.Webhooks;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using Octokit;
 using Octokit.GraphQL;
@@ -14,10 +17,14 @@ using Octokit.Webhooks;
 using Octokit.Webhooks.AspNetCore;
 using OpenAI;
 using OpenAI.Chat;
+using OpenIddict.Client.AspNetCore;
 using static Octokit.GraphQL.Variable;
 using ProductHeaderValue = Octokit.ProductHeaderValue;
 
 var builder = WebApplication.CreateBuilder(args);
+var githubCallbackPath = NormalizeCallbackPath(
+    builder.Configuration["Authentication:GitHub:CallbackPath"] ?? "/auth/github/callback");
+var openIddictGitHubCallbackUri = githubCallbackPath.TrimStart('/');
 
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -32,6 +39,7 @@ builder.Services.AddScoped<ReleaseTrackingService>();
 builder.Services.AddHostedService<IssueProcessBackgroundWorker>();
 builder.Services.AddScoped<IssueCommandProcessService>();
 builder.Services.AddSingleton<GithubOperationService>();
+builder.Services.AddScoped<GitHubUserMembershipService>();
 builder.Services.AddSingleton<IBackgroundTaskQueue>(_ => 
 {
     if (!int.TryParse(builder.Configuration["QueueCapacity"], out var queueCapacity))
@@ -48,6 +56,61 @@ builder.Services.AddSingleton<OpenAIClient>(_ => new OpenAIClient(new ApiKeyCred
 builder.Services.AddSingleton<IssueLabelService>();
 
 builder.Services.AddDbContext<BotContext>();
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.Cookie.Name = ".ClassIslandBot.Auth";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.LoginPath = "/auth/login";
+        options.AccessDeniedPath = "/auth/login";
+        options.ExpireTimeSpan = TimeSpan.FromDays(14);
+        options.SlidingExpiration = true;
+        options.Events = new CookieAuthenticationEvents
+        {
+            OnRedirectToLogin = context => HandleApiCookieRedirectAsync(context, StatusCodes.Status401Unauthorized),
+            OnRedirectToAccessDenied = context => HandleApiCookieRedirectAsync(context, StatusCodes.Status403Forbidden),
+        };
+    });
+builder.Services.AddAuthorization();
+builder.Services.AddOpenIddict()
+    .AddClient(options =>
+    {
+        options.AllowAuthorizationCodeFlow();
+        options.DisableTokenStorage();
+        options.SetRedirectionEndpointUris(openIddictGitHubCallbackUri);
+
+        if (builder.Environment.IsDevelopment())
+        {
+            options.AddDevelopmentEncryptionCertificate()
+                .AddDevelopmentSigningCertificate();
+        }
+        else
+        {
+            options.AddEphemeralEncryptionKey()
+                .AddEphemeralSigningKey();
+        }
+
+        options.UseSystemNetHttp();
+        var aspNetCore = options.UseAspNetCore()
+            .EnableRedirectionEndpointPassthrough();
+        if (builder.Environment.IsDevelopment())
+        {
+            aspNetCore.DisableTransportSecurityRequirement();
+        }
+
+        options.UseWebProviders()
+            .AddGitHub(github =>
+            {
+                github.SetProviderName(AuthConstants.GitHubProviderName);
+                github.SetRegistrationId(AuthConstants.GitHubRegistrationId);
+                github.SetClientId(GetRequiredConfigurationValue("Authentication:GitHub:ClientId"));
+                github.SetClientSecret(GetRequiredConfigurationValue("Authentication:GitHub:ClientSecret"));
+                github.SetRedirectUri(openIddictGitHubCallbackUri);
+                github.AddScopes("read:user", "read:org");
+            });
+    });
 builder.Services.AddControllers()
     .AddApplicationPart(typeof(Program).Assembly);
 builder.WebHost.UseSentry();
@@ -75,6 +138,8 @@ if (github != null)
 
 // app.UseHttpsRedirection();
 app.MapGitHubWebhooks(secret:app.Configuration["WebhookSecret"] ?? "");
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllers();
 app.UseSentryTracing();
 
@@ -109,3 +174,33 @@ using (var scope = app.Services.CreateScope())
 }
 app.MapFallbackToFile("/index.html");
 app.Run();
+
+static string NormalizeCallbackPath(string callbackPath)
+{
+    if (string.IsNullOrWhiteSpace(callbackPath))
+    {
+        return "/auth/github/callback";
+    }
+
+    return callbackPath.StartsWith('/') ? callbackPath : $"/{callbackPath}";
+}
+
+string GetRequiredConfigurationValue(string key)
+{
+    var value = builder.Configuration[key];
+    return string.IsNullOrWhiteSpace(value)
+        ? throw new InvalidOperationException($"Missing required configuration value: {key}.")
+        : value;
+}
+
+static Task HandleApiCookieRedirectAsync(RedirectContext<CookieAuthenticationOptions> context, int statusCode)
+{
+    if (context.Request.Path.StartsWithSegments("/api"))
+    {
+        context.Response.StatusCode = statusCode;
+        return Task.CompletedTask;
+    }
+
+    context.Response.Redirect(context.RedirectUri);
+    return Task.CompletedTask;
+}

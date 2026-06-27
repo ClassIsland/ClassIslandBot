@@ -1,12 +1,19 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
+import { SwitchButton } from '@element-plus/icons-vue'
 import rootRoutes from '@/router/rootRoutes'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
+
+function logout() {
+  void authStore.logout()
+}
 </script>
 
 <template>
-  <div >
+  <div>
     <el-container class="min-h-screen">
       <el-header class="px-0" style="padding: 0">
         <el-menu
@@ -19,7 +26,21 @@ const router = useRouter()
                  alt="Logo"/>
             <h1 class="font-medium text-xl">ClassIsland Bot</h1>
           </div>
-
+          <div class="mx-6 flex flex-1 items-center justify-end gap-3">
+            <span
+              v-if="authStore.user.login"
+              class="text-sm text-[var(--el-text-color-regular)]"
+            >
+              {{ authStore.user.login }}
+            </span>
+            <el-button
+              text
+              :icon="SwitchButton"
+              @click="logout"
+            >
+              退出
+            </el-button>
+          </div>
         </el-menu>
       </el-header>
       <el-container>

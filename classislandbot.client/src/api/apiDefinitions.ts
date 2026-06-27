@@ -22,6 +22,9 @@ export default {
   'DiscussionAssociations.update': ['PUT', '/api/v1/discussions/{id}'],
   'DiscussionAssociations.delete': ['DELETE', '/api/v1/discussions/{id}'],
   'DiscussionAssociations.MigrateDiscussions': ['GET', '/api/v1/discussions/migrate'],
+  'Auth.login': ['GET', '/api/v1/auth/login'],
+  'Auth.me': ['GET', '/api/v1/auth/me'],
+  'Auth.logout': ['POST', '/api/v1/auth/logout'],
   'GitHubMetadata.getRepositories': ['GET', '/api/v1/github/repositories'],
   'GitHubMetadata.getIssues': ['GET', '/api/v1/github/repositories/{repoId}/issues'],
   'GitHubMetadata.getDiscussions': ['GET', '/api/v1/github/discussions']
