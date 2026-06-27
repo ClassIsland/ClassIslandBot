@@ -168,6 +168,19 @@ public class DiscussionAssociationsController(
         return deleted ? NoContent() : NotFound();
     }
 
+    [HttpGet("migrate", Name = nameof(MigrateDiscussions))]
+    public async Task<IActionResult> MigrateDiscussions()
+    {
+        await taskQueue.QueueBackgroundWorkItemAndWaitAsync(async (token) =>
+        {
+            await using var scope = serviceScopeFactory.CreateAsyncScope();
+            var discussionService = scope.ServiceProvider.GetRequiredService<DiscussionService>();
+            await discussionService.MigrateDiscussions();
+        });
+        
+        return Ok();
+    }
+
     private static void ApplyRequest(DiscussionAssociation association, DiscussionAssociationRequest request)
     {
         association.RepoId = request.RepoId.Trim();

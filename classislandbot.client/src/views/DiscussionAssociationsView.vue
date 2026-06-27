@@ -272,6 +272,18 @@ function openCreateDialog() {
   loadFormDiscussions()
 }
 
+async function migrateExistedAssociations() {
+  try {
+    loading.value = true;
+    await ElMessageBox.confirm("你确定要迁移现有的 Discussion 关联状态吗？这可能需要一定的时间。");
+    await Apis.DiscussionAssociations.MigrateDiscussions();
+  } catch (e) {
+    // ignored
+  } finally {
+    loading.value = false;
+  }
+}
+
 function openEditDialog(row: DiscussionAssociationResponse) {
   if (row.id == null) {
     ElMessage.error('关联 ID 缺失，无法编辑')
@@ -401,22 +413,31 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="discussion-page">
-    <div class="page-header">
+  <section class="flex flex-col gap-[18px]">
+    <div class="flex items-start justify-between gap-4 max-[720px]:flex-col max-[720px]:items-stretch">
       <div>
-        <h2>Discussion 关联</h2>
-        <p>管理 Issue 与 GitHub Discussion 的关联记录。</p>
+        <h2 class="m-0 text-2xl font-[650] text-[var(--el-text-color-primary)]">Discussion 关联</h2>
+        <p class="mb-0 mt-1.5 text-[var(--el-text-color-secondary)]">管理 Issue 与 GitHub Discussion 的关联记录。</p>
       </div>
-      <el-button type="primary" :icon="Plus" @click="openCreateDialog">
-        新建关联
-      </el-button>
+      <div>
+        <el-button :icon="Refresh" @click="migrateExistedAssociations" :loading="loading">
+          迁移现有关联
+        </el-button>
+        <el-button type="primary" :icon="Plus" @click="openCreateDialog" :loading="loading">
+          新建关联
+        </el-button>
+      </div>
     </div>
 
-    <el-form class="filter-bar" :model="filters" inline>
+    <el-form
+      class="rounded-lg border border-[var(--el-border-color-lighter)] bg-[var(--el-bg-color)] p-4 max-[720px]:[&_.el-form-item]:!mr-0 max-[720px]:[&_.el-form-item]:!block"
+      :model="filters"
+      inline
+    >
       <el-form-item label="Repo ID">
         <el-select
           v-model="filters.repoId"
-          class="metadata-select repo-select"
+          class="w-[300px]"
           clearable
           filterable
           remote
@@ -434,15 +455,19 @@ onMounted(() => {
             :label="formatRepoLabel(option)"
             :value="option.id"
           >
-            <div class="option-main">{{ option.fullName ?? option.name ?? '' }}</div>
-            <div class="option-sub">{{ option.id ?? '' }}</div>
+            <div class="overflow-hidden text-ellipsis whitespace-nowrap text-[var(--el-text-color-primary)]">
+              {{ option.fullName ?? option.name ?? '' }}
+            </div>
+            <div class="overflow-hidden text-ellipsis whitespace-nowrap text-xs leading-[1.2] text-[var(--el-text-color-secondary)]">
+              {{ option.id ?? '' }}
+            </div>
           </el-option>
         </el-select>
       </el-form-item>
       <el-form-item label="Discussion ID">
         <el-select
           v-model="filters.discussionId"
-          class="metadata-select"
+          class="w-[260px]"
           clearable
           filterable
           remote
@@ -459,15 +484,19 @@ onMounted(() => {
             :label="formatDiscussionLabel(option)"
             :value="option.id"
           >
-            <div class="option-main">{{ formatDiscussionLabel(option) }}</div>
-            <div class="option-sub">{{ option.state ? `${option.state} · ` : '' }}{{ option.id ?? '' }}</div>
+            <div class="overflow-hidden text-ellipsis whitespace-nowrap text-[var(--el-text-color-primary)]">
+              {{ formatDiscussionLabel(option) }}
+            </div>
+            <div class="overflow-hidden text-ellipsis whitespace-nowrap text-xs leading-[1.2] text-[var(--el-text-color-secondary)]">
+              {{ option.state ? `${option.state} · ` : '' }}{{ option.id ?? '' }}
+            </div>
           </el-option>
         </el-select>
       </el-form-item>
       <el-form-item label="Issue ID">
         <el-select
           v-model="filters.issueId"
-          class="metadata-select"
+          class="w-[260px]"
           clearable
           filterable
           remote
@@ -485,13 +514,17 @@ onMounted(() => {
             :label="formatIssueLabel(option)"
             :value="option.id"
           >
-            <div class="option-main">{{ formatIssueLabel(option) }}</div>
-            <div class="option-sub">{{ option.state ?? '' }} · {{ option.id ?? '' }}</div>
+            <div class="overflow-hidden text-ellipsis whitespace-nowrap text-[var(--el-text-color-primary)]">
+              {{ formatIssueLabel(option) }}
+            </div>
+            <div class="overflow-hidden text-ellipsis whitespace-nowrap text-xs leading-[1.2] text-[var(--el-text-color-secondary)]">
+              {{ option.state ?? '' }} · {{ option.id ?? '' }}
+            </div>
           </el-option>
         </el-select>
       </el-form-item>
       <el-form-item label="状态">
-        <el-select v-model="filters.isTracking" class="tracking-filter">
+        <el-select v-model="filters.isTracking" class="w-32">
           <el-option label="全部" value="all" />
           <el-option label="追踪中" value="true" />
           <el-option label="已停止" value="false" />
@@ -512,7 +545,7 @@ onMounted(() => {
       :data="associations"
       row-key="id"
       border
-      class="association-table"
+      class="w-full"
       empty-text="暂无关联记录"
     >
       <el-table-column prop="id" label="ID" width="88" />
@@ -521,7 +554,7 @@ onMounted(() => {
       <el-table-column prop="issueId" label="Issue ID" min-width="220" show-overflow-tooltip />
       <el-table-column prop="refCommentId" label="Ref Comment ID" min-width="220" show-overflow-tooltip>
         <template #default="{ row }">
-          <span class="muted-text">{{ row.refCommentId || '未设置' }}</span>
+          <span class="text-[var(--el-text-color-secondary)]">{{ row.refCommentId || '未设置' }}</span>
         </template>
       </el-table-column>
       <el-table-column prop="isTracking" label="状态" width="110">
@@ -543,7 +576,7 @@ onMounted(() => {
       </el-table-column>
     </el-table>
 
-    <div class="pagination-row">
+    <div class="flex justify-end">
       <el-pagination
         background
         layout="total, sizes, prev, pager, next"
@@ -562,12 +595,12 @@ onMounted(() => {
         :model="form"
         :rules="rules"
         label-position="top"
-        class="association-form"
+        class="[&_.el-form-item:last-child]:!mb-0"
       >
         <el-form-item label="Repo ID" prop="repoId">
           <el-select
             v-model="form.repoId"
-            class="form-select"
+            class="w-full"
             clearable
             filterable
             remote
@@ -585,15 +618,19 @@ onMounted(() => {
               :label="formatRepoLabel(option)"
               :value="option.id"
             >
-              <div class="option-main">{{ option.fullName ?? option.name ?? '' }}</div>
-              <div class="option-sub">{{ option.id ?? '' }}</div>
+              <div class="overflow-hidden text-ellipsis whitespace-nowrap text-[var(--el-text-color-primary)]">
+                {{ option.fullName ?? option.name ?? '' }}
+              </div>
+              <div class="overflow-hidden text-ellipsis whitespace-nowrap text-xs leading-[1.2] text-[var(--el-text-color-secondary)]">
+                {{ option.id ?? '' }}
+              </div>
             </el-option>
           </el-select>
         </el-form-item>
         <el-form-item label="Discussion ID" prop="discussionId">
           <el-select
             v-model="form.discussionId"
-            class="form-select"
+            class="w-full"
             clearable
             filterable
             remote
@@ -610,15 +647,19 @@ onMounted(() => {
               :label="formatDiscussionLabel(option)"
               :value="option.id"
             >
-              <div class="option-main">{{ formatDiscussionLabel(option) }}</div>
-              <div class="option-sub">{{ option.state ? `${option.state} · ` : '' }}{{ option.id ?? '' }}</div>
+              <div class="overflow-hidden text-ellipsis whitespace-nowrap text-[var(--el-text-color-primary)]">
+                {{ formatDiscussionLabel(option) }}
+              </div>
+              <div class="overflow-hidden text-ellipsis whitespace-nowrap text-xs leading-[1.2] text-[var(--el-text-color-secondary)]">
+                {{ option.state ? `${option.state} · ` : '' }}{{ option.id ?? '' }}
+              </div>
             </el-option>
           </el-select>
         </el-form-item>
         <el-form-item label="Issue ID" prop="issueId">
           <el-select
             v-model="form.issueId"
-            class="form-select"
+            class="w-full"
             clearable
             filterable
             remote
@@ -636,8 +677,12 @@ onMounted(() => {
               :label="formatIssueLabel(option)"
               :value="option.id"
             >
-              <div class="option-main">{{ formatIssueLabel(option) }}</div>
-              <div class="option-sub">{{ option.state ?? '' }} · {{ option.id ?? '' }}</div>
+              <div class="overflow-hidden text-ellipsis whitespace-nowrap text-[var(--el-text-color-primary)]">
+                {{ formatIssueLabel(option) }}
+              </div>
+              <div class="overflow-hidden text-ellipsis whitespace-nowrap text-xs leading-[1.2] text-[var(--el-text-color-secondary)]">
+                {{ option.state ?? '' }} · {{ option.id ?? '' }}
+              </div>
             </el-option>
           </el-select>
         </el-form-item>
@@ -663,102 +708,3 @@ onMounted(() => {
     </el-dialog>
   </section>
 </template>
-
-<style scoped lang="scss">
-.discussion-page {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.page-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-
-  h2 {
-    margin: 0;
-    color: var(--el-text-color-primary);
-    font-size: 24px;
-    font-weight: 650;
-  }
-
-  p {
-    margin: 6px 0 0;
-    color: var(--el-text-color-secondary);
-  }
-}
-
-.filter-bar {
-  padding: 16px;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
-  background: var(--el-bg-color);
-}
-
-.tracking-filter {
-  width: 128px;
-}
-
-.metadata-select {
-  width: 260px;
-}
-
-.repo-select {
-  width: 300px;
-}
-
-.form-select {
-  width: 100%;
-}
-
-.option-main {
-  overflow: hidden;
-  color: var(--el-text-color-primary);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.option-sub {
-  overflow: hidden;
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.association-table {
-  width: 100%;
-}
-
-.muted-text {
-  color: var(--el-text-color-secondary);
-}
-
-.pagination-row {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.association-form {
-  :deep(.el-form-item:last-child) {
-    margin-bottom: 0;
-  }
-}
-
-@media (max-width: 720px) {
-  .page-header {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .filter-bar {
-    :deep(.el-form-item) {
-      display: block;
-      margin-right: 0;
-    }
-  }
-}
-</style>

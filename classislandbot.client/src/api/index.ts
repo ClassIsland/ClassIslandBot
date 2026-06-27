@@ -24,7 +24,8 @@ async function parseResponse(res: Response) {
 export const alovaInstance = createAlova({
   baseURL: '',
   requestAdapter: fetchAdapter(),
-  responded: parseResponse
+  responded: parseResponse,
+  cacheFor: null
 });
 
 export const $$userConfigMap = withConfigType({});

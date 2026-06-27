@@ -362,6 +362,23 @@ declare global {
       >(
         config: Config
       ): Alova2Method<null, 'DiscussionAssociations.delete', Config>;
+      /**
+       * ---
+       *
+       * [GET]
+       *
+       * **path:** /api/v1/discussions/migrate
+       *
+       * ---
+       *
+       * **Response**
+       * ```ts
+       * type Response = null
+       * ```
+       */
+      MigrateDiscussions<Config extends Alova2MethodConfig<null>>(
+        config?: Config
+      ): Alova2Method<null, 'DiscussionAssociations.MigrateDiscussions', Config>;
     };
     GitHubMetadata: {
       /**

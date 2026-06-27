@@ -320,7 +320,6 @@ public partial class DiscussionService(GitHubAuthService gitHubAuthService, BotC
                         Logger.LogError(e, "Unable to connect discussion #{}", i.Number);
                     }
 
-                    Console.ReadLine();
                 }
 
             } while (vars["after"] != null);
