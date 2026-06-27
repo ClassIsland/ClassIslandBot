@@ -17,7 +17,7 @@ const router = useRouter()
           <div class="flex items-center gap-2 mx-6">
             <img src="../assets/Logo.png" width="32" height="32"
                  alt="Logo"/>
-            <span class="font-medium text-xl">ClassIsland Bot</span>
+            <h1 class="font-medium text-xl">ClassIsland Bot</h1>
           </div>
 
         </el-menu>

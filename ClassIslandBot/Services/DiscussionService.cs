@@ -36,7 +36,7 @@ public partial class DiscussionService(GitHubAuthService gitHubAuthService, BotC
     private const string DiscussionReference =
         "此功能请求已开始在投票贴 <{0}> 投票，欢迎前来为你想要的功能投票。";
 
-    private const string VotingRepoId = "R_kgDOM02_VQ";
+    public const string VotingRepoId = "R_kgDOM02_VQ";
 
     private static readonly FrozenDictionary<string, string> RepoMapping = (new Dictionary<string, string>()
             {

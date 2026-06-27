@@ -15,18 +15,23 @@ public class IssueProcessBackgroundWorker(
     {
         while (!stoppingToken.IsCancellationRequested)
         {
+            TaskCompletionSource? completionSource = null;
             try
             {
                 logger.LogTrace("Dequeued work item");
-                var workItem = await taskQueue.DequeueAsync(stoppingToken);
+                var (workItem, completionSource1) = await taskQueue.DequeueAsync(stoppingToken);
+                completionSource = completionSource1;
                 await workItem(stoppingToken);
+                completionSource.SetResult();
             }
             catch (OperationCanceledException)
             {
+                completionSource?.SetCanceled(stoppingToken);
                 // Prevent throwing if stoppingToken was signaled
             }
             catch (Exception ex)
             {
+                completionSource?.SetException(ex);
                 logger.LogError(ex, "Error occurred executing task work item");
             }
         }

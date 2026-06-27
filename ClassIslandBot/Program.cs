@@ -48,6 +48,8 @@ builder.Services.AddSingleton<OpenAIClient>(_ => new OpenAIClient(new ApiKeyCred
 builder.Services.AddSingleton<IssueLabelService>();
 
 builder.Services.AddDbContext<BotContext>();
+builder.Services.AddControllers()
+    .AddApplicationPart(typeof(Program).Assembly);
 builder.WebHost.UseSentry();
 
 #if DEBUG
@@ -73,6 +75,7 @@ if (github != null)
 
 // app.UseHttpsRedirection();
 app.MapGitHubWebhooks(secret:app.Configuration["WebhookSecret"] ?? "");
+app.MapControllers();
 app.UseSentryTracing();
 
 #if DEBUG  // 处于开发环境时需要自动迁移

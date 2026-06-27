@@ -8,8 +8,21 @@ const router = createRouter({
       path: '/',
       name: 'root',
       component: () => import('@/views/index.vue'),
+      redirect: '/discussions',
       children: rootRoutes,
     },
+    {
+      path: '/auth',
+      name: 'authRoot',
+      component: () => import("@/views/auth/index.vue"),
+      children: [
+        {
+          path: 'login',
+          name: 'login',
+          component: () => import("@/views/auth/Login.vue"),
+        }
+      ]
+    }
   ],
 })
 

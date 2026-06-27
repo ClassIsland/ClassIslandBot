@@ -9,12 +9,14 @@
     "preview": "vite preview",
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
+    "api:sync": "alova gen -f",
     "lint": "run-s \"lint:*\"",
     "lint:oxlint": "oxlint . --fix",
     "lint:eslint": "eslint . --fix --cache"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
+    "alova": "^3.5.1",
     "element-plus": "^2.14.2",
     "pinia": "^3.0.4",
     "unplugin-icons": "^23.0.1",
@@ -22,6 +24,7 @@
     "vue-router": "^5.1.0"
   },
   "devDependencies": {
+    "@alova/wormhole": "^1.5.0",
     "@tailwindcss/vite": "^4.3.1",
     "@tsconfig/node24": "^24.0.4",
     "@types/node": "^24.13.2",

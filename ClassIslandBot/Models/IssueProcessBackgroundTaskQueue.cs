@@ -5,7 +5,7 @@ namespace ClassIslandBot.Models;
 
 public class IssueProcessBackgroundTaskQueue : IBackgroundTaskQueue
 {
-    private readonly Channel<Func<CancellationToken, ValueTask>> _queue;
+    private readonly Channel<(Func<CancellationToken, ValueTask>, TaskCompletionSource)> _queue;
 
     public IssueProcessBackgroundTaskQueue(int capacity)
     {
@@ -13,21 +13,29 @@ public class IssueProcessBackgroundTaskQueue : IBackgroundTaskQueue
         {
             FullMode = BoundedChannelFullMode.Wait
         };
-        _queue = Channel.CreateBounded<Func<CancellationToken, ValueTask>>(options);
+        _queue = Channel.CreateBounded<(Func<CancellationToken, ValueTask>, TaskCompletionSource)>(options);
     }
 
-    public async ValueTask QueueBackgroundWorkItemAsync(
+    public async ValueTask<TaskCompletionSource> QueueBackgroundWorkItemAsync(
         Func<CancellationToken, ValueTask> workItem)
     {
         ArgumentNullException.ThrowIfNull(workItem);
-        
-        await _queue.Writer.WriteAsync(workItem);
+
+        var taskCompletionSource = new TaskCompletionSource();
+        await _queue.Writer.WriteAsync((workItem, taskCompletionSource));
+        return taskCompletionSource;
     }
 
-    public async ValueTask<Func<CancellationToken, ValueTask>> DequeueAsync(
+    public async ValueTask QueueBackgroundWorkItemAndWaitAsync(Func<CancellationToken, ValueTask> workItem)
+    {
+        var tcs = await QueueBackgroundWorkItemAsync(workItem);
+        await tcs.Task;
+    }
+
+    public async ValueTask<(Func<CancellationToken, ValueTask>, TaskCompletionSource)> DequeueAsync(
         CancellationToken cancellationToken)
     {
-        Func<CancellationToken, ValueTask>? workItem =
+        var workItem =
             await _queue.Reader.ReadAsync(cancellationToken);
 
         return workItem;

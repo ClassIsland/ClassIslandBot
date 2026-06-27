@@ -1,4 +1,4 @@
-import { House } from '@element-plus/icons-vue'
+import { ChatDotRound, House } from '@element-plus/icons-vue'
 import type { RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
@@ -12,12 +12,12 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
-    path: 'home2',
-    name: 'home2',
-    component: () => import('@/views/HomeView.vue'),
+    path: 'discussions',
+    name: 'discussions',
+    component: () => import('@/views/DiscussionAssociationsView.vue'),
     meta: {
-      title: '首页',
-      icon: House,
+      title: 'Discussion 关联',
+      icon: ChatDotRound,
     },
   },
 ]

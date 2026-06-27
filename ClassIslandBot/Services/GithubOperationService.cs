@@ -2,6 +2,10 @@ using Octokit.GraphQL;
 using Octokit.GraphQL.Core;
 using Octokit.GraphQL.Model;
 using static Octokit.GraphQL.Variable;
+using RestProductHeaderValue = Octokit.ProductHeaderValue;
+using RestCredentials = Octokit.Credentials;
+using RestAuthenticationType = Octokit.AuthenticationType;
+using RestGitHubClient = Octokit.GitHubClient;
 
 namespace ClassIslandBot.Services;
 
@@ -13,6 +17,215 @@ public class GithubOperationService(GitHubAuthService gitHubAuthService)
     {
         return new Connection(new ProductHeaderValue(GitHubAuthService.GitHubAppName),
             await GitHubAuthService.GetInstallationTokenAsync());
+    }
+
+    private async Task<RestGitHubClient> GetRestClientAsync()
+    {
+        return new RestGitHubClient(new RestProductHeaderValue(GitHubAuthService.GitHubAppName))
+        {
+            Credentials = new RestCredentials(
+                await GitHubAuthService.GetInstallationTokenAsync(),
+                RestAuthenticationType.Bearer)
+        };
+    }
+
+    public async Task<IReadOnlyList<GitHubRepositoryOption>> GetRepositoriesAsync(string? keyword = null)
+    {
+        var client = await GetRestClientAsync();
+        var response = await client.GitHubApps.Installation.GetAllRepositoriesForCurrent();
+        var query = response.Repositories
+            .Select(x => new GitHubRepositoryOption(
+                x.NodeId,
+                x.Name,
+                x.FullName,
+                x.Description,
+                x.HtmlUrl))
+            .OrderBy(x => x.FullName)
+            .AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            query = query.Where(x =>
+                x.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                x.FullName.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                x.Id.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return query.Take(50).ToList();
+    }
+
+    public async Task<IReadOnlyList<GitHubIssueOption>> GetIssuesAsync(
+        string repoId,
+        string? keyword = null,
+        int take = 50)
+    {
+        var fetchSize = Math.Clamp(take, 1, 100);
+
+        if (TryParseNumberFilter(keyword, out var number))
+        {
+            var issue = await GetIssueByNumberAsync(repoId, number);
+            return issue == null ? [] : [issue];
+        }
+
+        var query = new Query()
+            .Node(new ID(repoId))
+            .Cast<Repository>()
+            .Issues(first: fetchSize, states: new Arg<IEnumerable<IssueState>>([IssueState.Open, IssueState.Closed]))
+            .Select(x => x.Nodes.Select(y => new GitHubIssueOption(
+                y.Id.ToString(),
+                y.Number,
+                y.Title,
+                y.State.ToString(),
+                y.Url)).ToList())
+            .Compile();
+
+        var issues = await (await GetConnectionAsync()).Run(query);
+        return FilterIssues(issues, keyword)
+            .Take(fetchSize)
+            .ToList();
+    }
+
+    public Task<IReadOnlyList<GitHubDiscussionOption>> GetVotingDiscussionsAsync(
+        string? keyword = null,
+        int take = 50) =>
+        GetDiscussionsAsync(DiscussionService.VotingRepoId, keyword, take);
+
+    private async Task<IReadOnlyList<GitHubDiscussionOption>> GetDiscussionsAsync(
+        string repoId,
+        string? keyword,
+        int take)
+    {
+        var fetchSize = Math.Clamp(take, 1, 100);
+
+        if (TryParseNumberFilter(keyword, out var number))
+        {
+            var discussion = await GetDiscussionByNumberAsync(repoId, number);
+            return discussion == null ? [] : [discussion];
+        }
+
+        var query = new Query()
+            .Node(new ID(repoId))
+            .Cast<Repository>()
+            .Discussions(first: fetchSize)
+            .Select(x => x.Nodes.Select(y => new GitHubDiscussionOption(
+                y.Id.ToString(),
+                y.Number,
+                y.Title,
+                null,
+                y.Url)).ToList())
+            .Compile();
+
+        var discussions = await (await GetConnectionAsync()).Run(query);
+        return FilterDiscussions(discussions, keyword)
+            .Take(fetchSize)
+            .ToList();
+    }
+
+    public async Task<string> NormalizeIssueIdentifierAsync(string repoId, string issueIdentifier)
+    {
+        var trimmed = issueIdentifier.Trim();
+        if (!TryParseNumberFilter(trimmed, out var number))
+        {
+            return trimmed;
+        }
+
+        return (await GetIssueNodeIdByNumberAsync(repoId, number)) ?? trimmed;
+    }
+
+    public async Task<string> NormalizeVotingDiscussionIdentifierAsync(string discussionIdentifier)
+    {
+        var trimmed = discussionIdentifier.Trim();
+        if (!TryParseNumberFilter(trimmed, out var number))
+        {
+            return trimmed;
+        }
+
+        return (await GetDiscussionNodeIdByNumberAsync(DiscussionService.VotingRepoId, number)) ?? trimmed;
+    }
+
+    private async Task<string?> GetIssueNodeIdByNumberAsync(string repoId, int number) =>
+        (await GetIssueByNumberAsync(repoId, number))?.Id;
+
+    private async Task<string?> GetDiscussionNodeIdByNumberAsync(string repoId, int number) =>
+        (await GetDiscussionByNumberAsync(repoId, number))?.Id;
+
+    private async Task<GitHubIssueOption?> GetIssueByNumberAsync(string repoId, int number)
+    {
+        var query = new Query()
+            .Node(new ID(repoId))
+            .Cast<Repository>()
+            .Issue(number)
+            .Select(x => new GitHubIssueOption(
+                x.Id.ToString(),
+                x.Number,
+                x.Title,
+                x.State.ToString(),
+                x.Url))
+            .Compile();
+
+        return await (await GetConnectionAsync()).Run(query);
+    }
+
+    private async Task<GitHubDiscussionOption?> GetDiscussionByNumberAsync(string repoId, int number)
+    {
+        var query = new Query()
+            .Node(new ID(repoId))
+            .Cast<Repository>()
+            .Discussion(number)
+            .Select(x => new GitHubDiscussionOption(
+                x.Id.ToString(),
+                x.Number,
+                x.Title,
+                null,
+                x.Url))
+            .Compile();
+
+        return await (await GetConnectionAsync()).Run(query);
+    }
+
+    private static bool TryParseNumberFilter(string? keyword, out int number)
+    {
+        number = 0;
+        if (string.IsNullOrWhiteSpace(keyword))
+        {
+            return false;
+        }
+
+        var normalized = keyword.Trim();
+        if (normalized.StartsWith('#'))
+        {
+            normalized = normalized[1..];
+        }
+
+        return int.TryParse(normalized, out number) && number > 0;
+    }
+
+    private static IEnumerable<GitHubIssueOption> FilterIssues(IEnumerable<GitHubIssueOption> issues, string? keyword)
+    {
+        if (string.IsNullOrWhiteSpace(keyword))
+        {
+            return issues;
+        }
+
+        return issues.Where(x =>
+            x.Id.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+            x.Number.ToString().Contains(keyword.TrimStart('#'), StringComparison.OrdinalIgnoreCase) ||
+            x.Title.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static IEnumerable<GitHubDiscussionOption> FilterDiscussions(
+        IEnumerable<GitHubDiscussionOption> discussions,
+        string? keyword)
+    {
+        if (string.IsNullOrWhiteSpace(keyword))
+        {
+            return discussions;
+        }
+
+        return discussions.Where(x =>
+            x.Id.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+            x.Number.ToString().Contains(keyword.TrimStart('#'), StringComparison.OrdinalIgnoreCase) ||
+            x.Title.Contains(keyword, StringComparison.OrdinalIgnoreCase));
     }
 
     public async Task<ID> AddCommentAsync(ID subjectId, string body)
@@ -126,3 +339,24 @@ public class GithubOperationService(GitHubAuthService gitHubAuthService)
         throw new NotImplementedException();
     }
 }
+
+public record GitHubRepositoryOption(
+    string Id,
+    string Name,
+    string FullName,
+    string? Description,
+    string Url);
+
+public record GitHubIssueOption(
+    string Id,
+    int Number,
+    string Title,
+    string State,
+    string Url);
+
+public record GitHubDiscussionOption(
+    string Id,
+    int Number,
+    string Title,
+    string? State,
+    string Url);
